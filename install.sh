@@ -8,8 +8,43 @@ INSTALL_PATH="/usr/local/bin"
 SERVICE_NAME="phantom.service"
 WORKING_DIR="/etc/phantom"
 
+# توابع کمکی (باید در ابتدا باشند)
+print_info() { echo -e "\e[34m[INFO]\e[0m $1"; }
+print_success() { echo -e "\e[32m[SUCCESS]\e[0m $1"; }
+print_error() { echo -e "\e[31m[ERROR]\e[0m $1" >&2; exit 1; }
+print_warning() { echo -e "\e[33m⚠️ WARNING: $1\033[0m"; }
+
+clear
+print_info "Starting Phantom Tunnel Installation..."
+
+if [ "$(id -u)" -ne 0 ]; then
+  print_error "This script must be run as root. Please use 'sudo'."
+fi
+
+# ایجاد دایرکتوری کاری
+mkdir -p "$WORKING_DIR"
+
+# --- بخش بررسی لایسنس ---
 print_info "Checking License..."
 MACHINE_ID=$(hostname)
+
+if [ ! -f "$WORKING_DIR/license.key" ]; then
+    echo -e "\e[33m--------------------------------------------\e[0m"
+    echo -e "Your Machine ID: \e[32m$MACHINE_ID\e[0m"
+    echo -e "Please provide this ID to the provider to get your Key."
+    echo -e "\e[33m--------------------------------------------\e[0m"
+    
+    read -p "Enter your License Key: " USER_KEY
+    if [ -z "$USER_KEY" ]; then
+        print_error "License Key cannot be empty."
+    fi
+    echo "$USER_KEY" | sudo tee "$WORKING_DIR/license.key" > /dev/null
+    print_success "License key saved."
+fi
+# -----------------------
+
+print_info "Checking for dependencies (curl, grep)..."
+# ... ادامه کدهای قبلی (دانلود و تنظیم سرویس) ...
 
 if [ ! -f "$WORKING_DIR/license.key" ]; then
     echo -e "\e[33m--------------------------------------------\e[0m"
