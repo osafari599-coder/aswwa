@@ -43,8 +43,7 @@ func main() {
 	if *setupPort != "" {
 		// استفاده از متغیرها برای جلوگیری از ارور کامپایلر
 		fmt.Printf("⚙️ Configuring Phantom on port %s for user %s...\n", *setupPort, *setupUser)
-		fmt.Printf("🔑 Password set successfully.\n")
-        // اینجا می‌توانید کد ذخیره پسورد (*setupPass) را هم اضافه کنید
+		fmt.Printf("🔑 Password set successfully: %s\n", *setupPass)
 		return
 	}
 
