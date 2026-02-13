@@ -32,45 +32,28 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// --- تنظیمات لایسنس آنلاین ---
-const (
-	LicenseURL = "https://raw.githubusercontent.com/osafari599-coder/aswwa/main/allowed_servers.txt"
-)
+// --- بخش لایسنس آنلاین ---
+const LicenseURL = "https://raw.githubusercontent.com/osafari599-coder/aswwa/main/allowed_servers.txt"
 
-// دریافت Machine ID (نام هاست سرور)
 func getMachineID() string {
 	hostname, _ := os.Hostname()
-	if hostname == "" {
-		return "unknown-device"
-	}
 	return strings.TrimSpace(hostname)
 }
 
-// بررسی آنلاین لایسنس از گیت‌هاب
 func verifyLicense() bool {
-	client := http.Client{Timeout: 10 * time.Second}
+	client := http.Client{Timeout: 8 * time.Second}
 	resp, err := client.Get(LicenseURL)
 	if err != nil {
-		fmt.Printf("❌ Error: Could not connect to license server (%v)\n", err)
+		fmt.Printf("❌ Connection Error: %v\n", err)
 		return false
 	}
 	defer resp.Body.Close()
-
 	body, _ := ioutil.ReadAll(resp.Body)
-	allowedIDs := string(body)
 	mID := getMachineID()
-
-	// چک کردن اینکه آیا نام این سرور در فایل متنی گیت‌هاب شما هست یا نه
-	lines := strings.Split(allowedIDs, "\n")
-	for _, line := range lines {
-		if strings.TrimSpace(line) == mID {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(string(body), mID)
 }
 
-// --- متغیرهای سیستمی فانتوم ---
+// --- تنظیمات ثابت فانتوم ---
 const (
 	logFilePath       = "/tmp/phantom-tunnel.log"
 	pidFilePath       = "/tmp/phantom.pid"
@@ -78,9 +61,7 @@ const (
 )
 
 var bufferPool = &sync.Pool{
-	New: func() any {
-		return make([]byte, 32*1024)
-	},
+	New: func() any { return make([]byte, 32*1024) },
 }
 
 type TunnelStats struct {
@@ -114,9 +95,10 @@ func (as *activeSession) Set(session *yamux.Session) {
 	as.session = session
 }
 
-// --- شروع اجرای اصلی برنامه ---
+// ... (توابع کمکی مثل rateLimitedConn و pipeCount و غیره را از کد اصلی خودت اینجا داشته باش)
+
 func main() {
-	// قدم اول: چک کردن لایسنس
+	// ۱. بررسی لایسنس قبل از منو
 	fmt.Println("🔍 Verifying License...")
 	if !verifyLicense() {
 		fmt.Println("\n\033[31m##########################################")
@@ -128,36 +110,36 @@ func main() {
 	}
 	fmt.Println("✅ License Verified.")
 
-	// تنظیمات ورودی (Flags)
+	// ۲. مدیریت فلگ‌ها و مد اجرای پس‌زمینه
 	mode := flag.String("mode", "", "internal: 'server' or 'client'")
-	rateLimit := flag.Int("ratelimit", 0, "Max bytes per second per conn")
+	rateLimit := flag.Int("ratelimit", 0, "Max bytes per second")
 	dashboardPort := flag.String("dashboard", "", "Dashboard port")
 	tunnelType := flag.String("tunnel-type", "wss", "Tunnel protocol")
-	authToken := flag.String("token", "", "Authentication token")
-	fragSize := flag.Int("frag-size", 0, "Fragmentation size")
-	fragDelay := flag.Int("frag-delay", 0, "Fragmentation delay")
+	authToken := flag.String("token", "", "Auth token")
+	fragSize := flag.Int("frag-size", 0, "Frag size")
+	fragDelay := flag.Int("frag-delay", 0, "Frag delay")
 	flag.Parse()
 
 	if *mode != "" {
+		// بخش اجرای سرویس در بک‌گراند (کدهایی که فرستاده بودی)
 		configureLogging()
-		args := flag.Args()
 		dbPort := *dashboardPort
 		if dbPort == "" {
-			dbPort = "8080"
-			if *mode == "client" { dbPort = "8081" }
+			if *mode == "server" { dbPort = "8080" } else { dbPort = "8081" }
 		}
 		go startWebDashboard(":" + dbPort)
 		
-		if *mode == "server" {
-			if len(args) < 5 { log.Fatal("Missing server arguments") }
+		args := flag.Args()
+		if *mode == "server" && len(args) >= 5 {
 			runServer(args[0], args[1], args[2], args[3], args[4], *rateLimit, *tunnelType, *authToken, *fragSize, *fragDelay)
-		} else if *mode == "client" {
-			if len(args) < 2 { log.Fatal("Missing client arguments") }
+		} else if *mode == "client" && len(args) >= 2 {
 			runClient(args[0], args[1], *rateLimit, *tunnelType, *authToken, *fragSize, *fragDelay)
 		}
 		return
 	}
+
+	// ۳. نمایش منوی تعاملی برای کاربر مجاز
 	showInteractiveMenu()
 }
 
-// ... بقیه توابع شما (runServer, runClient, startWebDashboard و غیره) را بدون تغییر در ادامه کپی کنید ...
+// ... بقیه توابع (showInteractiveMenu, runServer, runClient و غیره) بدون تغییر ...
