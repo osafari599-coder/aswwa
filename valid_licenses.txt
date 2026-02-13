@@ -1,0 +1,3 @@
+server-vps-1
+my-special-customer
+innercoffee
