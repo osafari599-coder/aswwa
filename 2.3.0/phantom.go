@@ -32,13 +32,27 @@ func generateHash(mID string) string {
 
 // بررسی معتبر بودن لایسنس
 func verifyLicense() bool {
-	data, err := ioutil.ReadFile(LicenseFile)
-	if err != nil {
-		return false
-	}
-	userLicense := strings.TrimSpace(string(data))
-	expectedLicense := generateHash(getMachineID())
-	return userLicense == expectedLicense
+    // آدرس فایلی که لیست لایسنس‌های مجاز توش هست
+    url := "https://raw.githubusercontent.com/username/repo/main/valid_licenses.txt"
+    
+    resp, err := http.Get(url)
+    if err != nil {
+        fmt.Println("❌ خطا در اتصال به سرور لایسنس")
+        return false
+    }
+    defer resp.Body.Close()
+
+    body, _ := ioutil.ReadAll(resp.Body)
+    allowedIDs := string(body)
+    
+    mID := getMachineID()
+    
+    // چک می‌کنه که آیا کد این سرور توی اون لیست هست یا نه
+    if strings.Contains(allowedIDs, mID) {
+        return true
+    }
+    
+    return false
 }
 
 func main() {
