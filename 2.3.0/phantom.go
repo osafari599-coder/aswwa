@@ -3,25 +3,17 @@ package main
 import (
 	"bufio"
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
 	"crypto/tls"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
-	"math/big"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,10 +24,8 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// --- بخش لایسنس آنلاین ---
-const (
-	LicenseURL = "https://raw.githubusercontent.com/osafari599-coder/aswwa/main/allowed_servers.txt"
-)
+// --- تنظیمات لایسنس آنلاین ---
+const LicenseURL = "https://raw.githubusercontent.com/osafari599-coder/aswwa/main/allowed_servers.txt"
 
 func getMachineID() string {
 	hostname, _ := os.Hostname()
@@ -46,35 +36,14 @@ func verifyLicense() bool {
 	client := http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Get(LicenseURL)
 	if err != nil {
-		fmt.Printf("❌ Error connecting to license server: %v\n", err)
 		return false
 	}
 	defer resp.Body.Close()
-
 	body, _ := ioutil.ReadAll(resp.Body)
-	mID := getMachineID()
-	
-	// بررسی وجود Hostname در فایل گیت‌هاب
-	lines := strings.Split(string(body), "\n")
-	for _, line := range lines {
-		if strings.TrimSpace(line) == mID {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(string(body), getMachineID())
 }
 
-// --- متغیرها و ساختارهای اصلی فانتوم ---
-const (
-	logFilePath       = "/tmp/phantom-tunnel.log"
-	pidFilePath       = "/tmp/phantom.pid"
-	successSignalPath = "/tmp/phantom_success.signal"
-)
-
-var bufferPool = &sync.Pool{
-	New: func() any { return make([]byte, 32*1024) },
-}
-
+// --- ساختارهای آماری ---
 type TunnelStats struct {
 	sync.Mutex
 	ActiveConnections int
@@ -85,59 +54,45 @@ type TunnelStats struct {
 }
 var stats = &TunnelStats{Uptime: time.Now()}
 
-// --- تابع اصلی (Main) ---
+// --- تابع اصلی ---
 func main() {
-	// ۱. بررسی لایسنس (اجباری)
-	fmt.Println("🔍 Checking License...")
+	// ۱. چک کردن لایسنس در شروع برنامه
 	if !verifyLicense() {
-		fmt.Println("\n\033[31m##########################################")
-		fmt.Println("       LICENSE ERROR: UNAUTHORIZED")
-		fmt.Printf("       Your Machine ID: %s\n", getMachineID())
-		fmt.Println("   Contact Admin to whitelist your server.")
-		fmt.Println("##########################################\033[0m")
+		fmt.Printf("\n\033[31m❌ Access Denied! Your Machine ID (%s) is not authorized.\033[0m\n", getMachineID())
 		os.Exit(1)
 	}
-	fmt.Println("✅ License Verified Successfully.")
 
-	// ۲. تعریف فلگ‌ها برای تنظیمات و اجرا
-	mode := flag.String("mode", "", "internal: 'server' or 'client'")
-	setupPort := flag.String("setup-port", "", "Port for initial setup")
-	setupUser := flag.String("setup-user", "", "User for initial setup")
-	setupPass := flag.String("setup-pass", "", "Pass for initial setup")
-	startPanel := flag.Bool("start-panel", false, "Start the web dashboard")
-	
-	// سایر فلگ‌های مربوط به تونل
-	rateLimit := flag.Int("ratelimit", 0, "Max bytes per second")
-	tunnelType := flag.String("tunnel-type", "wss", "Tunnel protocol")
+	// ۲. تعریف آرگومان‌ها (Flags)
+	mode := flag.String("mode", "", "server or client")
+	setupPort := flag.String("setup-port", "", "Port for setup")
+	setupUser := flag.String("setup-user", "", "User for setup")
+	setupPass := flag.String("setup-pass", "", "Pass for setup")
 	flag.Parse()
 
-	// ۳. مدیریت بخش Setup (جلوگیری از ارور Too few arguments)
-	if *setupPort != "" && *setupUser != "" && *setupPass != "" {
-		fmt.Printf("⚙️ Configuring Phantom on port %s...\n", *setupPort)
-		// در اینجا کد ذخیره تنظیمات در دیتابیس یا فایل را قرار بده
-		// فعلاً یک فایل سیگنال برای اتمام نصب می‌سازیم
-		os.WriteFile(successSignalPath, []byte("ok"), 0644)
-		fmt.Println("✅ Setup completed.")
+	// ۳. اگر دستور ستاپ از سمت install.sh اومده باشه
+	if *setupPort != "" {
+		fmt.Printf("⚙️ Setting up Phantom on port %s...\n", *setupPort)
+		// اینجا می‌تونی دیتابیس یا فایل تنظیمات رو بسازی
+		os.WriteFile("/tmp/phantom_success.signal", []byte("ok"), 0644)
 		return
 	}
 
-	// ۴. اجرای پنل یا منوی اصلی
-	if *startPanel {
-		fmt.Println("🚀 Starting Web Dashboard...")
-		// کدهای مربوط به startWebDashboard را اینجا فراخوانی کن
-		select {} // نگه داشتن برنامه
+	// ۴. اگر مد سرور یا کلاینت انتخاب شده باشه
+	if *mode != "" {
+		fmt.Printf("🚀 Running in %s mode...\n", *mode)
+		// فراخوانی توابع runServer یا runClient
+		select {} 
 	}
 
-	// ۵. اگر هیچ آرگومانی نبود، منوی تعاملی باز شود
-	showInteractiveMenu()
+	// ۵. در غیر این صورت منوی گرافیکی/تعاملی
+	showMenu()
 }
 
-func showInteractiveMenu() {
-	fmt.Println("\n--- Phantom Tunnel Interactive Menu ---")
+func showMenu() {
+	fmt.Println("=======================================")
+	fmt.Println(" 👻 Phantom Tunnel v2.3 Online Edition")
+	fmt.Println("=======================================")
 	fmt.Println("1. Start Server")
-	fmt.Println("2. Start Client")
-	fmt.Println("3. Exit")
-	// کدهای منوی خودت را اینجا ادامه بده...
+	fmt.Println("2. Exit")
+	// بقیه منوی خودت...
 }
-
-// بقیه توابع شما (runServer, runClient, غیره) را در ادامه کپی کنید...
