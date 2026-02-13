@@ -2,87 +2,61 @@
 
 set -e
 
-# --- ۱. تنظیمات متغیرها ---
+# تنظیمات
 GITHUB_REPO="webwizards-team/Phantom-Tunnel"
+LICENSE_URL="https://raw.githubusercontent.com/osafari599-coder/aswwa/main/allowed_servers.txt"
 EXECUTABLE_NAME="phantom"
 INSTALL_PATH="/usr/local/bin"
 SERVICE_NAME="phantom.service"
 WORKING_DIR="/etc/phantom"
 
-# --- ۲. تعریف توابع (حتماً باید قبل از استفاده تعریف شوند) ---
+# توابع چاپ
 print_info() { echo -e "\e[34m[INFO]\e[0m $1"; }
 print_success() { echo -e "\e[32m[SUCCESS]\e[0m $1"; }
 print_error() { echo -e "\e[31m[ERROR]\e[0m $1" >&2; exit 1; }
-print_warning() { echo -e "\e[33m⚠️ WARNING: $1\033[0m"; }
 
-# --- ۳. شروع نصب ---
 clear
 print_info "Starting Phantom Tunnel Installation..."
 
 if [ "$(id -u)" -ne 0 ]; then
-  print_error "This script must be run as root. Please use 'sudo'."
+  print_error "This script must be run as root."
 fi
 
-# ایجاد پوشه کاری
-mkdir -p "$WORKING_DIR"
-
-# --- ۴. بخش لایسنسینگ ---
-print_info "Checking License..."
+# ۱. چک کردن لایسنس آنلاین
+print_info "Checking Server Authorization..."
 MACHINE_ID=$(hostname)
+ALLOWED_LIST=$(curl -sSL "$LICENSE_URL")
 
-if [ ! -f "$WORKING_DIR/license.key" ]; then
-    echo -e "\e[33m--------------------------------------------\e[0m"
+if ! echo "$ALLOWED_LIST" | grep -qxw "$MACHINE_ID"; then
+    echo -e "\e[31m--------------------------------------------\e[0m"
+    echo -e "❌ ACCESS DENIED!"
     echo -e "Your Machine ID: \e[32m$MACHINE_ID\e[0m"
-    echo -e "Please provide this ID to the provider to get your Key."
-    echo -e "\e[33m--------------------------------------------\e[0m"
-    
-    read -p "Enter your License Key: " USER_KEY
-    if [ -z "$USER_KEY" ]; then
-        print_error "License Key cannot be empty."
-    fi
-    echo "$USER_KEY" | sudo tee "$WORKING_DIR/license.key" > /dev/null
-    print_success "License key saved."
+    echo -e "This server is not in the allowed list."
+    echo -e "Please send your Machine ID to Admin."
+    echo -e "\e[31m--------------------------------------------\e[0m"
+    exit 1
 fi
 
-# --- ۵. بررسی وابستگی‌ها ---
-print_info "Checking for dependencies (curl, grep)..."
-if command -v apt-get &> /dev/null; then
-    apt-get update -y > /dev/null && apt-get install -y -qq curl grep > /dev/null
-elif command -v yum &> /dev/null; then
-    yum install -y curl grep > /dev/null
-fi
-print_success "Dependencies are satisfied."
+print_success "Server Authorized: $MACHINE_ID"
 
-# --- ۶. تشخیص معماری و دانلود فایل ---
+# ۲. نصب پیش‌نیازها
+print_info "Installing dependencies..."
+apt-get update -y > /dev/null && apt-get install -y curl grep > /dev/null
+
+# ۳. دانلود و نصب (بقیه کدهای قبلی خودت)
 ARCH=$(uname -m)
-case $ARCH in
-    x86_64) ASSET_NAME="phantom-amd64" ;;
-    aarch64 | arm64) ASSET_NAME="phantom-arm64" ;;
-    *) print_error "Unsupported architecture: $ARCH" ;;
-esac
+[ "$ARCH" == "x86_64" ] && ASSET_NAME="phantom-amd64" || ASSET_NAME="phantom-arm64"
 
 LATEST_TAG=$(curl -s "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | grep -oP '"tag_name": "\K[^"]+')
-if [ -z "$LATEST_TAG" ]; then
-    print_error "Failed to fetch the latest release tag."
-fi
-
 DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${LATEST_TAG}/${ASSET_NAME}"
 
-print_info "Downloading latest binary..."
-TMP_DIR=$(mktemp -d); cd "$TMP_DIR"
-if ! curl -sSLf -o "$EXECUTABLE_NAME" "$DOWNLOAD_URL"; then
-    print_error "Download failed."
-fi
-
-# جایگذاری فایل اجرایی
+print_info "Downloading binary..."
+curl -sSLf -o "$EXECUTABLE_NAME" "$DOWNLOAD_URL"
 chmod +x "$EXECUTABLE_NAME"
-if systemctl is-active --quiet $SERVICE_NAME; then
-    sudo systemctl stop $SERVICE_NAME
-fi
+mkdir -p "$WORKING_DIR"
 mv "$EXECUTABLE_NAME" "$INSTALL_PATH/"
-print_success "Binary installed successfully."
 
-# --- ۷. تنظیم سرویس ---
+# ۴. ساخت سرویس
 cat > "/etc/systemd/system/${SERVICE_NAME}" <<EOF
 [Unit]
 Description=Phantom Tunnel Service
@@ -101,5 +75,4 @@ EOF
 systemctl daemon-reload
 systemctl enable --now ${SERVICE_NAME}
 
-print_success "Phantom Tunnel is now RUNNING!"
-echo "------------------------------------------------------------"
+print_success "Phantom Tunnel installed and started!"
