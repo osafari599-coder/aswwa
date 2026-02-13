@@ -40,10 +40,19 @@ func verifyLicense() bool {
 	}
 	defer resp.Body.Close()
 	body, _ := ioutil.ReadAll(resp.Body)
-	return strings.Contains(string(body), getMachineID())
+	mID := getMachineID()
+	
+	// بررسی دقیق نام سرور در فایل لیست سفید
+	lines := strings.Split(string(body), "\n")
+	for _, line := range lines {
+		if strings.TrimSpace(line) == mID {
+			return true
+		}
+	}
+	return false
 }
 
-// --- ساختارهای آماری ---
+// --- ساختارهای آماری و متغیرهای فانتوم ---
 type TunnelStats struct {
 	sync.Mutex
 	ActiveConnections int
@@ -54,45 +63,52 @@ type TunnelStats struct {
 }
 var stats = &TunnelStats{Uptime: time.Now()}
 
-// --- تابع اصلی ---
+// --- تابع اصلی اجرا ---
 func main() {
-	// ۱. چک کردن لایسنس در شروع برنامه
+	// ۱. تایید لایسنس قبل از هر عملیاتی
 	if !verifyLicense() {
-		fmt.Printf("\n\033[31m❌ Access Denied! Your Machine ID (%s) is not authorized.\033[0m\n", getMachineID())
+		fmt.Printf("\n\033[31m❌ ACCESS DENIED! Your Machine ID (%s) is not authorized.\033[0m\n", getMachineID())
 		os.Exit(1)
 	}
 
-	// ۲. تعریف آرگومان‌ها (Flags)
+	// ۲. تعریف ورودی‌ها (برای جلوگیری از ارور Too few arguments)
 	mode := flag.String("mode", "", "server or client")
-	setupPort := flag.String("setup-port", "", "Port for setup")
-	setupUser := flag.String("setup-user", "", "User for setup")
-	setupPass := flag.String("setup-pass", "", "Pass for setup")
+	setupPort := flag.String("setup-port", "", "Setup port")
+	setupUser := flag.String("setup-user", "", "Setup username")
+	setupPass := flag.String("setup-pass", "", "Setup password")
+	startPanel := flag.Bool("start-panel", false, "Start the panel service")
 	flag.Parse()
 
-	// ۳. اگر دستور ستاپ از سمت install.sh اومده باشه
+	// ۳. مدیریت بخش ستاپ خودکار
 	if *setupPort != "" {
-		fmt.Printf("⚙️ Setting up Phantom on port %s...\n", *setupPort)
-		// اینجا می‌تونی دیتابیس یا فایل تنظیمات رو بسازی
+		fmt.Printf("⚙️ Configuring Phantom on port %s...\n", *setupPort)
+		// سیگنال موفقیت برای اسکریپت نصب
 		os.WriteFile("/tmp/phantom_success.signal", []byte("ok"), 0644)
 		return
 	}
 
-	// ۴. اگر مد سرور یا کلاینت انتخاب شده باشه
-	if *mode != "" {
-		fmt.Printf("🚀 Running in %s mode...\n", *mode)
-		// فراخوانی توابع runServer یا runClient
+	// ۴. اجرای پنل وب
+	if *startPanel {
+		fmt.Println("🚀 Phantom Dashboard is starting...")
+		// در اینجا تابع اجرای سرور وب خود را فراخوانی کنید
 		select {} 
 	}
 
-	// ۵. در غیر این صورت منوی گرافیکی/تعاملی
-	showMenu()
+	// ۵. اجرای مد سرور/کلاینت یا منوی اصلی
+	if *mode == "server" {
+		fmt.Println("Running in Server Mode...")
+	} else if *mode == "client" {
+		fmt.Println("Running in Client Mode...")
+	} else {
+		showMenu()
+	}
 }
 
 func showMenu() {
+	fmt.Println("\n=======================================")
+	fmt.Println(" 👻 Phantom Tunnel v2.3.0 | Authorized")
 	fmt.Println("=======================================")
-	fmt.Println(" 👻 Phantom Tunnel v2.3 Online Edition")
-	fmt.Println("=======================================")
-	fmt.Println("1. Start Server")
-	fmt.Println("2. Exit")
-	// بقیه منوی خودت...
+	fmt.Println("1. Start Tunnel Server")
+	fmt.Println("2. Start Tunnel Client")
+	fmt.Println("3. Exit")
 }
